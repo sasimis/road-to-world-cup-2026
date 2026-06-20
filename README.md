@@ -1,6 +1,6 @@
 # Road to World Cup 2026
 
-An interactive, browser-based tournament companion connected to the shared `WorldCup26` Google Sheet. It turns the match schedule and results into a colourful match centre, live group tables, and a complete knockout tree from the Round of 32 to the final.
+Welcome to an interactive, browser-based tournament companion connected to the shared `WorldCup26` Google Sheet. It turns the match schedule and results into a colourful match centre, live group tables, and a complete knockout tree from the Round of 32 to the final.
 
 ## What it includes
 
@@ -33,7 +33,7 @@ The knockout routing comes from the match labels in the workbook. For example:
 - Match 76 is `1F vs 2C`
 - Match 89 is `W73 vs W75`
 - Match 101 is `W97 vs W98`
-- The final is `W101 vs W102`
+- The final is `Winner101 vs Winner102`
 
 Round-of-32 teams intentionally remain unassigned until qualification is known. Each dropdown is restricted by its workbook rule: `2A` only offers Group A teams and `1F` only offers Group F teams. A combined third-place slot such as `3ABCDF` only displays the teams currently ranked third in the listed groups.
 
@@ -51,14 +51,6 @@ Changes made directly in the webpage are stored in the current browser's `localS
 - Clearing browser site data removes them.
 - **Export picks** downloads a portable JSON copy.
 - **Reset** restores the results originally imported from the workbook.
-
-## Run locally
-
-Open `index.html` in a modern browser. The application is self-contained and requires no build step or server.
-
-## GitHub Pages
-
-This repository can be published directly with GitHub Pages: choose the repository's default branch and the root folder in **Settings → Pages**.
 
 ## Disclaimer
 

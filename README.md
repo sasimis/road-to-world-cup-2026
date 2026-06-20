@@ -16,6 +16,7 @@ https://sasimis.github.io/road-to-world-cup-2026/
 - Printable bracket and JSON prediction export
 - Automatic Google Sheet refresh on launch and every 60 seconds
 - Full-screen match presentation with oversized flags, country names, score, date, and venue
+- Mobile-first progressive match rendering, lazy flag loading, and reduced visual effects
 
 ## Live Google Sheet connection
 

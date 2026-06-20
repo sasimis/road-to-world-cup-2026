@@ -52,6 +52,32 @@ Changes made directly in the webpage are stored in the current browser's `localS
 - **Export picks** downloads a portable JSON copy.
 - **Reset** restores the results originally imported from the workbook.
 
+## Run locally
+
+Open `index.html` in a modern browser. The application is self-contained and requires no build step or server.
+
+## Project structure
+
+```text
+.
+├── index.html                 # Semantic page structure
+├── assets/
+│   ├── css/
+│   │   └── styles.css         # Responsive tournament presentation
+│   ├── js/
+│   │   ├── app.js             # Sync, standings, bracket and UI logic
+│   │   └── data.js            # Bundled offline tournament fallback
+│   └── flags/                 # Local SVG country flags
+├── .nojekyll                  # Serve static assets unchanged on GitHub Pages
+└── README.md
+```
+
+The application has no framework or package dependency. It can be hosted on any static web server, opened locally, or served directly by GitHub Pages.
+
+## GitHub Pages
+
+GitHub Pages serves this project directly from the `main` branch and repository root.
+
 ## Disclaimer
 
 This is an independent fan-made tournament tracker and is not affiliated with or endorsed by FIFA.

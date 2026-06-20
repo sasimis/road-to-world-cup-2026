@@ -2,9 +2,11 @@
 
 Welcome to an interactive, browser-based tournament companion connected to the shared `WorldCup26` Google Sheet. It turns the match schedule and results into a colourful match centre, live group tables, and a complete knockout tree from the Round of 32 to the final.
 
+https://sasimis.github.io/road-to-world-cup-2026/
+
 ## What it includes
 
-- All 104 matches from the workbook
+- All 104 matches from the workbook in google sheets
 - Existing group-stage results preloaded from the source data
 - Live group standings that recalculate when scores change
 - Round-of-32 qualification placeholders such as `2A`, `1F`, and `3ABCDF`
@@ -72,11 +74,7 @@ Open `index.html` in a modern browser. The application is self-contained and req
 └── README.md
 ```
 
-The application has no framework or package dependency. It can be hosted on any static web server, opened locally, or served directly by GitHub Pages.
 
-## GitHub Pages
-
-GitHub Pages serves this project directly from the `main` branch and repository root.
 
 ## Disclaimer
 

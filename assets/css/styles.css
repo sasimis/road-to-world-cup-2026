@@ -631,7 +631,11 @@ button {
   justify-content: space-between;
 }
 .champion-panel .cup {
-  font-size: 46px;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.35));
 }
 .champion-name {
   font-family: Georgia, serif;

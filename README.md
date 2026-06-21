@@ -54,7 +54,6 @@ Changes made directly in the webpage are stored in the current browser's `localS
 
 - Refreshing or reopening the page in the same browser keeps the changes.
 - Clearing browser site data removes them.
-- **Export picks** downloads a portable JSON copy.
 - **Reset** restores the results originally imported from the workbook.
 
 ## Run locally

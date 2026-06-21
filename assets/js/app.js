@@ -64,6 +64,5 @@ document.getElementById('clearBracketBtn').addEventListener('click',()=>{state.w
 document.getElementById('resetBtn').addEventListener('click',()=>{if(confirm('Reset all added scores and bracket picks?')){state={version:6,scores:{...defaultScores},overrides:{},winners:{},sheetSig:null};save();render();toast('Google Sheet results restored')}});
 document.getElementById('syncBtn').addEventListener('click',()=>syncFromGoogleSheet(true));
 document.getElementById('printBtn').addEventListener('click',()=>window.print());
-document.getElementById('exportBtn').addEventListener('click',()=>{const roundOf32=Object.fromEntries(Array.from({length:16},(_,index)=>73+index).map(number=>[number,participants(number)])),blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),scores:state.scores,roundOf32,manualOverrides:state.overrides,winners:state.winners,champion:state.winners[104]||null},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='road-to-26-picks.json';a.click();URL.revokeObjectURL(a.href);toast('Picks exported')});
 window.addEventListener('resize',()=>{if(activeView==='bracket')drawConnectors()});
 render();syncFromGoogleSheet();setInterval(()=>syncFromGoogleSheet(),60000);

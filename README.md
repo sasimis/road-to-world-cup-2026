@@ -38,9 +38,9 @@ The knockout routing comes from the match labels in the workbook. For example:
 - Match 101 is `W97 vs W98`
 - The final is `Winner101 vs Winner102`
 
-Round-of-32 teams intentionally remain unassigned until qualification is known. Each dropdown is restricted by its workbook rule: `2A` only offers Group A teams and `1F` only offers Group F teams. A combined third-place slot such as `3ABCDF` only displays the teams currently ranked third in the listed groups.
+Round-of-32 teams are assigned automatically from the current group tables. `1A` resolves to the current Group A winner, `2A` to the current runner-up, and the eight best third-placed teams are ranked across all twelve groups. Their exact opponents are then assigned collectively with all 495 combinations from Annex C of the [FIFA World Cup 2026 Regulations](https://digitalhub.fifa.com/m/636f5c9c6f29771f/original/FWC2026_regulations_EN.pdf).
 
-Once a team is selected in any Round-of-32 slot, it is removed from every other dropdown so the same country cannot enter the bracket twice. If updated scores move a selected team out of an eligible third-place position, that invalid selection is automatically cleared.
+Group ties follow FIFA's order: head-to-head points, head-to-head goal difference, head-to-head goals, overall goal difference, overall goals, team conduct score, and FIFA ranking. The optional `teams` sheet columns E and F can supply team-conduct scores and FIFA ranking positions when those final tie-breakers are needed; otherwise the page keeps a stable provisional order.
 
 After the Round of 32 there are no free-form team selections. Participants are carried forward strictly from the workbook's winner routes (`W73`, `W89`, and so on), so a team can only enter a later match by winning the correct preceding branch.
 

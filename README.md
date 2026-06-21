@@ -6,14 +6,14 @@ https://sasimis.github.io/road-to-world-cup-2026/
 
 ## What it includes
 
-- All 104 matches from the workbook in google sheets
+- All 104 matches from the workbook in Google Sheets
 - Existing group-stage results preloaded from the source data
 - Live group standings that recalculate when scores change
 - Round-of-32 qualification placeholders such as `2A`, `1F`, and `3ABCDF`
 - A clickable knockout bracket that carries each selected winner into the next match
 - Local SVG country flags for dependable rendering on Windows, macOS, and Linux
 - Responsive layouts for desktop and mobile
-- Printable bracket and JSON prediction export
+- Printable knockout bracket
 - Automatic Google Sheet refresh on launch and every 60 seconds
 - Full-screen match presentation with oversized flags, country names, score, date, and venue
 - Mobile-first progressive match rendering, lazy flag loading, and reduced visual effects
@@ -69,14 +69,13 @@ Open `index.html` in a modern browser. The application is self-contained and req
 │   ├── css/
 │   │   └── styles.css         # Responsive tournament presentation
 │   ├── js/
-│   │   ├── app.js             # Sync, standings, bracket and UI logic
-│   │   └── data.js            # Bundled offline tournament fallback
+│   │   ├── app.js             # Hand-maintained sync, standings, bracket and UI logic
+│   │   ├── data.js            # Generated offline tournament snapshot
+│   │   └── third-place-map.js # Generated FIFA Annex C allocation lookup
 │   └── flags/                 # Local SVG country flags
 ├── .nojekyll                  # Serve static assets unchanged on GitHub Pages
 └── README.md
 ```
-
-
 
 ## Disclaimer
 

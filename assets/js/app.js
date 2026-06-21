@@ -1,68 +1,1056 @@
-const DATA=window.WORLDCUP_DATA;
-const ISO3={MEX:'MX',RSA:'ZA',KOR:'KR',CZE:'CZ',CAN:'CA',BIH:'BA',QAT:'QA',SUI:'CH',BRA:'BR',MAR:'MA',HAI:'HT',SCO:'SCOTLAND',USA:'US',PAR:'PY',AUS:'AU',TUR:'TR',GER:'DE',CUR:'CW',CIV:'CI',ECU:'EC',NED:'NL',JPN:'JP',SWE:'SE',TUN:'TN',BEL:'BE',EGY:'EG',IRN:'IR',NZL:'NZ',ESP:'ES',CPV:'CV',KSA:'SA',URU:'UY',FRA:'FR',SEN:'SN',IRQ:'IQ',NOR:'NO',ARG:'AR',ALG:'DZ',AUT:'AT',JOR:'JO',POR:'PT',COD:'CD',UZB:'UZ',COL:'CO',ENG:'ENGLAND',CRO:'HR',GHA:'GH',PAN:'PA'};
-const GOOGLE_SHEET_ID='1tvoPbpXmwkwtVDLVJo62wM_etwknNg9ZXDrMZHLJl6k';
-let teamByName={},matchByNumber={},sourceMap={},defaultScores={};
-function rebuildDataIndexes(){teamByName=Object.fromEntries(DATA.teams.map(t=>[t.name,t]));matchByNumber=Object.fromEntries(DATA.matches.map(m=>[m.number,m]));if(matchByNumber[100])matchByNumber[100].label='W95 vs W96';sourceMap={};for(const match of DATA.matches){const route=(match.number===100?'W95 vs W96':match.label).match(/^W(\d+)\s+vs\s+W(\d+)$/);if(route)sourceMap[match.number]=[Number(route[1]),Number(route[2])]}}
-function scoresFromMatches(matches){const scores={};for(const match of matches){if(!match.result)continue;const parts=String(match.result).split(/[–-]/).map(Number);if(parts.length===2&&!parts.some(Number.isNaN))scores[match.number]=parts}return scores}
-rebuildDataIndexes();defaultScores=scoresFromMatches(DATA.matches);
-const roundLayout={73:[1,1],75:[1,3],74:[1,5],77:[1,7],83:[1,9],84:[1,11],81:[1,13],82:[1,15],76:[1,17],78:[1,19],79:[1,21],80:[1,23],86:[1,25],88:[1,27],85:[1,29],87:[1,31],89:[2,2],90:[2,6],93:[2,10],94:[2,14],91:[2,18],92:[2,22],95:[2,26],96:[2,30],97:[3,4],98:[3,12],99:[3,20],100:[3,28],101:[4,8],102:[4,24],104:[5,16]};
-let state;try{state=JSON.parse(localStorage.getItem('roadto26-state'))||{}}catch{state={}}
-state={version:6,scores:{...defaultScores,...(state.scores||{})},overrides:state.version===6?(state.overrides||{}):{},winners:state.winners||{},sheetSig:state.sheetSig||null};
-let activeView='bracket',activeFilter='All',searchTerm='',matchVisibleLimit=window.matchMedia('(max-width:700px)').matches?16:40;
-function save(){localStorage.setItem('roadto26-state',JSON.stringify(state))}
-function gvizRows(payload){return payload.table.rows.map(row=>row.c.map(cell=>cell?.v??null))}
-function loadSheetTab(sheet,range){return new Promise((resolve,reject)=>{const callback='__roadToWorldCup_'+Date.now()+'_'+Math.random().toString(36).slice(2),script=document.createElement('script'),timer=setTimeout(()=>finish(new Error('Google Sheet timed out')),12000);function finish(error,data){clearTimeout(timer);delete window[callback];script.remove();error?reject(error):resolve(data)}window[callback]=payload=>payload.status==='ok'?finish(null,payload):finish(new Error(payload.errors?.[0]?.detailed_message||'Google Sheet query failed'));script.onerror=()=>finish(new Error('Google Sheet is unavailable'));const query=new URLSearchParams({sheet,range,tqx:`out:json;responseHandler:${callback}`,cacheBust:String(Date.now())});script.src=`https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?${query}`;document.head.appendChild(script)})}
-function setSyncStatus(mode,text){const el=document.getElementById('syncStatus');if(!el)return;el.className='sync-pill '+mode;el.textContent=text}
-let syncInFlight=false;
-async function syncFromGoogleSheet(manual=false){if(syncInFlight)return;syncInFlight=true;setSyncStatus('','Syncing sheet…');try{const [matchPayload,teamPayload]=await Promise.all([loadSheetTab('world_cup_matches','A1:H105'),loadSheetTab('teams','A1:F49')]);const matches=gvizRows(matchPayload).filter(row=>Number(row[0])).map(row=>({number:Number(row[0]),home:String(row[1]||''),away:String(row[2]||''),city:String(row[3]||''),stage:String(row[4]||''),label:String(row[5]||''),kickoff:String(row[6]||''),result:row[7]==null?null:String(row[7])}));const teams=gvizRows(teamPayload).filter(row=>Number(row[0])&&row[1]).map(row=>({id:Number(row[0]),name:String(row[1]),code:String(row[2]||''),group:String(row[3]||''),fairPlay:row[4]==null?null:Number(row[4]),worldRank:row[5]==null?null:Number(row[5])}));if(matches.length!==104||teams.length!==48)throw new Error(`Expected 104 matches and 48 teams; received ${matches.length} and ${teams.length}`);DATA.matches=matches;DATA.teams=teams;rebuildDataIndexes();defaultScores=scoresFromMatches(matches);const sig=matchPayload.sig+'|'+teamPayload.sig;if(state.sheetSig!==sig){state.scores={...defaultScores};state.sheetSig=sig;sanitize()}else{save()}render();const time=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});setSyncStatus('live','Sheet live · '+time);if(manual)toast('Google Sheet updated')}catch(error){setSyncStatus('error','Offline data');if(manual)toast(error.message)}finally{syncInFlight=false}}
-function flag(name){const t=teamByName[name],iso=t&&ISO3[t.code];return iso?`<img class="flag-img" src="assets/flags/${iso.toLowerCase()}.svg" alt="${esc(name)} flag" loading="lazy" decoding="async" width="28" height="19">`:'<span aria-hidden="true">◌</span>'}
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function dateLabel(raw){const m=raw.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);if(!m)return raw;const d=new Date(+m[1],+m[2]-1,+m[3]);return d.toLocaleDateString('en',{month:'short',day:'numeric'})+' · '+m[4]+':'+m[5]}
-function statValue(value,fallback){return value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):fallback}
-function partitionEqual(list,key){const groups=[];for(const item of list){const value=key(item),last=groups[groups.length-1];if(!last||last.key!==value)groups.push({key:value,items:[item]});else last.items.push(item)}return groups.map(group=>group.items)}
-function headToHeadStats(teams,matches){const names=new Set(teams.map(team=>team.name)),stats=Object.fromEntries(teams.map(team=>[team.name,{pts:0,gf:0,ga:0,gd:0}]));for(const match of matches){if(!names.has(match.home)||!names.has(match.away))continue;const score=state.scores[match.number];if(!score||score.length<2||score.some(value=>value===''||!Number.isFinite(Number(value))))continue;const home=Number(score[0]),away=Number(score[1]),a=stats[match.home],b=stats[match.away];a.gf+=home;a.ga+=away;b.gf+=away;b.ga+=home;if(home>away)a.pts+=3;else if(home<away)b.pts+=3;else{a.pts++;b.pts++}}for(const value of Object.values(stats))value.gd=value.gf-value.ga;return stats}
-function rankOverall(teams){return [...teams].sort((a,b)=>b.gd-a.gd||b.gf-a.gf||statValue(b.fairPlay,-Infinity)-statValue(a.fairPlay,-Infinity)||statValue(a.worldRank,Infinity)-statValue(b.worldRank,Infinity)||a.id-b.id)}
-function rankPointTie(teams,matches){if(teams.length<2)return teams;const mini=headToHeadStats(teams,matches),sorted=[...teams].sort((a,b)=>mini[b.name].pts-mini[a.name].pts||mini[b.name].gd-mini[a.name].gd||mini[b.name].gf-mini[a.name].gf),clusters=partitionEqual(sorted,team=>`${mini[team.name].pts}|${mini[team.name].gd}|${mini[team.name].gf}`);if(clusters.length===1)return rankOverall(teams);return clusters.flatMap(cluster=>cluster.length>1?rankPointTie(cluster,matches):cluster)}
-function standings(){const groups={};for(const letter of 'ABCDEFGHIJKL')groups[letter]=DATA.teams.filter(t=>t.group===letter).map(t=>({id:t.id,name:t.name,fairPlay:t.fairPlay,worldRank:t.worldRank,p:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0}));const groupMatches=DATA.matches.filter(match=>match.stage==='Group Stage');for(const match of groupMatches){const score=state.scores[match.number];if(!score||score.length<2||score.some(value=>value===''||!Number.isFinite(Number(value))))continue;const group=teamByName[match.home]?.group,a=groups[group]?.find(team=>team.name===match.home),b=groups[group]?.find(team=>team.name===match.away);if(!a||!b)continue;const home=Number(score[0]),away=Number(score[1]);a.p++;b.p++;a.gf+=home;a.ga+=away;b.gf+=away;b.ga+=home;if(home>away){a.w++;b.l++;a.pts+=3}else if(home<away){b.w++;a.l++;b.pts+=3}else{a.d++;b.d++;a.pts++;b.pts++}}for(const [group,list] of Object.entries(groups)){for(const team of list)team.gd=team.gf-team.ga;const matches=groupMatches.filter(match=>teamByName[match.home]?.group===group),pointsGroups=partitionEqual([...list].sort((a,b)=>b.pts-a.pts),team=>String(team.pts));groups[group]=pointsGroups.flatMap(cluster=>cluster.length>1?rankPointTie(cluster,matches):cluster)}return groups}
-function rankedThirds(){return Object.entries(standings()).map(([group,list])=>({...list[2],group})).sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||statValue(b.fairPlay,-Infinity)-statValue(a.fairPlay,-Infinity)||statValue(a.worldRank,Infinity)-statValue(b.worldRank,Infinity)||a.id-b.id)}
-function thirdPlaceAllocation(){const thirds=rankedThirds().slice(0,8),key=thirds.map(team=>team.group).sort().join(''),rule=window.THIRD_PLACE_MAP?.[key]||{},byGroup=Object.fromEntries(thirds.map(team=>[team.group,team.name])),byWinner={};for(const [winnerGroup,thirdGroup] of Object.entries(rule))byWinner[winnerGroup]=byGroup[thirdGroup]||null;return{thirds,key,byWinner}}
-function resolveToken(token,num){const placed=token.match(/^([12])([A-L])$/);if(placed)return standings()[placed[2]][Number(placed[1])-1]?.name||null;const third=token.match(/^3([A-L]+)$/);if(third){const winnerToken=matchByNumber[num].label.split(/\s+vs\s+/).find(part=>/^1[A-L]$/.test(part)),winnerGroup=winnerToken?.slice(1);return winnerGroup?thirdPlaceAllocation().byWinner[winnerGroup]||null:null}return null}
-function r32SlotKey(num,side){return `${num}:${side}`}
-function r32Slots(){const slots=[];for(let num=73;num<=88;num++){const match=matchByNumber[num];if(!match)continue;match.label.split(/\s+vs\s+/).forEach((token,side)=>slots.push({num,side,token,key:r32SlotKey(num,side)}))}return slots}
-function automaticR32Participants(num){return matchByNumber[num].label.split(/\s+vs\s+/).map(token=>resolveToken(token,num))}
-function baseEligibleNames(token){const placed=token.match(/^[12]([A-L])$/);if(placed)return standings()[placed[1]].map(team=>team.name);const third=token.match(/^3([A-L]+)$/);if(third)return thirdPlaceAllocation().thirds.filter(team=>third[1].includes(team.group)).map(team=>team.name);return[]}
-function participantsWithOverrides(num,overrides=state.overrides){return automaticR32Participants(num).map((name,side)=>overrides[r32SlotKey(num,side)]||name)}
-function r32Participants(num){return participantsWithOverrides(num)}
-function setDraftOverride(draft,slot,name){const automatic=automaticR32Participants(slot.num)[slot.side];if(name===automatic)delete draft[slot.key];else draft[slot.key]=name}
-function buildOverrideProposal(num,side,name){const slots=r32Slots(),target=slots.find(slot=>slot.num===num&&slot.side===side);if(!target||!baseEligibleNames(target.token).includes(name))return null;const current=participantsWithOverrides(num)[side],draft={...state.overrides},changed=new Set([num]),other=slots.find(slot=>slot.key!==target.key&&participantsWithOverrides(slot.num,draft)[slot.side]===name);if(other){if(!baseEligibleNames(other.token).includes(current))return null;setDraftOverride(draft,other,current);changed.add(other.num)}setDraftOverride(draft,target,name);const picks=slots.map(slot=>participantsWithOverrides(slot.num,draft)[slot.side]).filter(Boolean);if(new Set(picks).size!==picks.length)return null;return{overrides:draft,changed}}
-function sanitizeR32Overrides(){const slots=r32Slots(),validKeys=new Set(slots.map(slot=>slot.key));for(const key of Object.keys(state.overrides)){const slot=slots.find(item=>item.key===key),name=state.overrides[key];if(!validKeys.has(key)||!slot||!baseEligibleNames(slot.token).includes(name)||name===automaticR32Participants(slot.num)[slot.side])delete state.overrides[key]}let guard=0;while(guard++<32){const used=new Map();let removed=false;for(const slot of slots){const name=participantsWithOverrides(slot.num)[slot.side];if(!name)continue;if(used.has(name)){const duplicateOverride=state.overrides[slot.key]?slot:used.get(name);if(state.overrides[duplicateOverride.key]){delete state.overrides[duplicateOverride.key];removed=true;break}}else used.set(name,slot)}if(!removed)break}}
-function participants(num){if(num>=73&&num<=88)return r32Participants(num);if(num===103){return [loser(101),loser(102)]}const src=sourceMap[num]||[];return src.map(n=>state.winners[n]||null)}
-function loser(num){const p=participants(num),w=state.winners[num];return w?p.find(x=>x&&x!==w)||null:null}
-function sanitize(){sanitizeR32Overrides();let changed=true;while(changed){changed=false;for(const num of [73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104]){const w=state.winners[num];if(w&&!participants(num).includes(w)){delete state.winners[num];changed=true}}}save()}
-function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800)}
-function renderStats(){const count=Object.values(state.scores).filter(s=>s&&s.length===2&&s.every(v=>v!==''&&Number.isFinite(Number(v)))).length;document.getElementById('playedStat').textContent=count;const champ=state.winners[104];document.getElementById('heroChampion').textContent=champ||'Still unwritten';document.getElementById('championName').textContent=champ||'Make your picks'}
-function renderFilters(){const stages=['All','Group Stage','Round of 32','Round of 16','Quarterfinals','Semifinals','Final'];document.getElementById('matchFilters').innerHTML=stages.map(s=>`<button class="chip ${s===activeFilter?'active':''}" data-filter="${s}">${s}</button>`).join('')}
-function renderMatches(){const grid=document.getElementById('matchGrid'),more=document.getElementById('matchMore');let matches=DATA.matches.filter(m=>(activeFilter==='All'||m.stage===activeFilter)&&(m.home+' '+m.away+' '+m.city+' '+m.label).toLowerCase().includes(searchTerm)),visible=matches.slice(0,matchVisibleLimit);grid.innerHTML=visible.length?visible.map(m=>{const s=state.scores[m.number]||['',''];const dynamic=m.number>=73?participants(m.number):[m.home,m.away],tokens=m.label.split(/\s+vs\s+/);const home=dynamic[0]||(m.number>=73?tokens[0]:m.home),away=dynamic[1]||(m.number>=73?tokens[1]:m.away),done=s[0]!==''&&s[1]!=='';return `<article class="match-card" data-match-open="${m.number}" tabindex="0" aria-label="Open match ${m.number}"><div class="match-top"><span>Match ${m.number} · ${esc(m.label)}</span><span>${esc(m.stage)}</span></div><div class="team-score"><div class="team"><span class="flag">${flag(home)}</span><span>${esc(home)}</span></div><input class="score-input" inputmode="numeric" min="0" type="number" aria-label="${esc(home)} score" data-score="${m.number}:0" value="${s[0]??''}"></div><div class="team-score"><div class="team"><span class="flag">${flag(away)}</span><span>${esc(away)}</span></div><input class="score-input" inputmode="numeric" min="0" type="number" aria-label="${esc(away)} score" data-score="${m.number}:1" value="${s[1]??''}"></div><div class="match-foot"><span><i class="status-dot ${done?'done':''}"></i>${done?'Final':'Awaiting result'}</span><span>${dateLabel(m.kickoff)} · ${esc(m.city)}</span></div></article>`}).join(''):'<div class="empty">No matches found.</div>';more.innerHTML=matches.length>visible.length?`<button data-load-more>Show ${Math.min(window.matchMedia('(max-width:700px)').matches?16:40,matches.length-visible.length)} more matches</button>`:''}
-function detailFlag(name){return teamByName[name]?`<div class="detail-flag">${flag(name)}</div>`:`<div class="detail-flag"><div class="detail-placeholder">${esc(name)}</div></div>`}
-function openMatchDetail(number){const match=matchByNumber[number];if(!match)return;const dynamic=number>=73?participants(number):[match.home,match.away],tokens=match.label.split(/\s+vs\s+/),home=dynamic[0]||(number>=73?tokens[0]:match.home),away=dynamic[1]||(number>=73?tokens[1]:match.away),score=state.scores[number],hasScore=score&&score.length===2&&score.every(value=>value!==''&&Number.isFinite(Number(value))),scoreText=hasScore?`${score[0]} – ${score[1]}`:'VS';document.getElementById('detailLabel').textContent=`Match ${number} · ${match.label}`;document.getElementById('detailStage').textContent=match.stage;document.getElementById('matchDetailContent').innerHTML=`<div class="detail-matchup"><div class="detail-team">${detailFlag(home)}<h2>${esc(home)}</h2></div><div class="detail-score">${scoreText}<small>${hasScore?'Final score':'Result pending'}</small></div><div class="detail-team">${detailFlag(away)}<h2>${esc(away)}</h2></div></div><div class="detail-meta"><span>${dateLabel(match.kickoff)}</span><span>${esc(match.city)}</span><span>${esc(match.stage)}</span></div>`;const detail=document.getElementById('matchDetail');detail.classList.add('active');detail.setAttribute('aria-hidden','false');document.body.classList.add('no-scroll');detail.querySelector('[data-close-detail]').focus()}
-function closeMatchDetail(){const detail=document.getElementById('matchDetail');detail.classList.remove('active');detail.setAttribute('aria-hidden','true');document.body.classList.remove('no-scroll')}
-function renderGroups(){const groups=standings(),bestThirds=new Set(thirdPlaceAllocation().thirds.map(team=>team.name));document.getElementById('groupsGrid').innerHTML=Object.entries(groups).map(([g,list])=>`<article class="group-card"><div class="group-title"><h3>Group ${g}</h3></div><table class="table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead><tbody>${list.map((t,i)=>`<tr class="${i<2?'qualify':i===2?(bestThirds.has(t.name)?'third third-best':'third third-out'):''}"><td class="rank">${i+1}</td><td><div class="team"><span class="flag">${flag(t.name)}</span><span>${esc(t.name)}</span></div></td><td>${t.p}</td><td>${t.gd>0?'+':''}${t.gd}</td><td>${t.pts}</td></tr>`).join('')}</tbody></table></article>`).join('')}
-function slotDescription(token){const placed=token.match(/^([12])([A-L])$/);if(placed)return `${placed[1]==='1'?'1st':'2nd'} place · Group ${placed[2]}`;const third=token.match(/^3([A-L]+)$/);if(third)return `3rd place · Groups ${[...third[1]].join('/')}`;return token}
-function openTeamPicker(trigger){const [numRaw,sideRaw]=trigger.dataset.teamPicker.split(':'),num=Number(numRaw),side=Number(sideRaw),token=matchByNumber[num].label.split(/\s+vs\s+/)[side],current=participantsWithOverrides(num)[side],automatic=automaticR32Participants(num)[side],picker=document.getElementById('teamPicker'),candidates=baseEligibleNames(token);picker.dataset.num=String(num);picker.dataset.side=String(side);picker.innerHTML=`<div class="team-picker-head"><div><small>Match ${num}</small><strong>${esc(slotDescription(token))}</strong></div><button type="button" data-close-picker aria-label="Close team picker">×</button></div><div class="team-picker-options">${candidates.map(name=>{const available=name===current||Boolean(buildOverrideProposal(num,side,name)),team=teamByName[name],isAutomatic=name===automatic;return `<button type="button" class="team-picker-option ${name===current?'selected':''}" data-team-choice="${esc(name)}" ${available?'':'disabled'}><span class="picker-flag">${flag(name)}</span><span class="picker-name"><strong>${esc(name)}</strong><small>Group ${esc(team?.group||'')} ${isAutomatic?'· Calculated':''}</small></span><span class="picker-state">${name===current?'✓':available?'↔':'Used'}</span></button>`}).join('')}</div><p class="team-picker-note">Only teams allowed by this slot are shown. A used team is available when it can be swapped without creating a duplicate.</p>`;picker.hidden=false;picker.classList.add('open');const rect=trigger.getBoundingClientRect();if(window.innerWidth>700){picker.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-334))+'px';picker.style.top=Math.min(rect.bottom+8,window.innerHeight-picker.offsetHeight-12)+'px'}else{picker.style.left='';picker.style.top=''}picker.querySelector('.team-picker-option:not(:disabled)')?.focus()}
-function closeTeamPicker(){const picker=document.getElementById('teamPicker');picker.classList.remove('open');picker.hidden=true}
-function applyTeamChoice(name){const picker=document.getElementById('teamPicker'),num=Number(picker.dataset.num),side=Number(picker.dataset.side),proposal=buildOverrideProposal(num,side,name);if(!proposal){toast('That team cannot be used in this slot');return}state.overrides=proposal.overrides;for(const changedNum of proposal.changed)delete state.winners[changedNum];closeTeamPicker();sanitize();render();toast(name+' selected')}
-function matchCard(num){const m=matchByNumber[num],p=participants(num),w=state.winners[num],isFinal=num===104,tokens=m.label.split(/\s+vs\s+/);const rows=p.map((name,i)=>num<=88?`<div class="pick-row ${w===name?'winner':''}"><button type="button" class="team-choice" data-team-picker="${num}:${i}" aria-label="Change ${esc(name||slotDescription(tokens[i]))}"><span class="team"><span class="flag">${flag(name)}</span><span class="${name?'':'tbd'}">${esc(name||slotDescription(tokens[i]))}</span></span><span class="picker-chevron">⌄</span></button><button type="button" class="advance-btn ${w===name?'chosen':''}" data-pick="${num}" data-team="${esc(name||'')}" ${name?'':'disabled'} aria-label="Advance ${esc(name||'team')}">${w===name?'✓':'→'}</button></div>`:`<button class="pick-row ${w===name?'winner':''}" data-pick="${num}" data-team="${esc(name||'')}" ${name?'':'disabled'}><span class="team"><span class="flag">${flag(name)}</span><span class="${name?'':'tbd'}">${esc(name||'Winner TBD')}</span></span>${w===name?'<span class="pick-mark">✓</span>':''}</button>`).join('');return `<article id="match-${num}" class="bracket-match ${w?'selected':''} ${isFinal?'final-card':''}" style="grid-column:${roundLayout[num][0]};grid-row:${roundLayout[num][1]} / span 2"><div class="bm-head"><span>Match ${num}</span><span>${dateLabel(m.kickoff)}</span></div>${rows}</article>`}
-function renderBracket(){sanitize();const nums=Object.keys(roundLayout).map(Number);document.getElementById('bracketGrid').innerHTML=nums.map(matchCard).join('');const p=participants(103),w=state.winners[103];document.getElementById('thirdPlace').innerHTML=`<div class="bracket-match">${p.map(name=>`<button class="pick-row ${w===name?'winner':''}" data-pick="103" data-team="${esc(name||'')}" ${name?'':'disabled'}><span class="team"><span class="flag">${flag(name)}</span><span class="${name?'':'tbd'}">${esc(name||'Semifinal loser TBD')}</span></span>${w===name?'<span class="pick-mark">✓</span>':''}</button>`).join('')}</div>`;requestAnimationFrame(drawConnectors)}
-function drawConnectors(){const svg=document.getElementById('connectorLayer'),base=svg.getBoundingClientRect(),paths=[];for(const [target,sources] of Object.entries(sourceMap)){for(const src of sources){const a=document.getElementById('match-'+src),b=document.getElementById('match-'+target);if(!a||!b)continue;const ar=a.getBoundingClientRect(),br=b.getBoundingClientRect(),x1=ar.right-base.left,y1=ar.top+ar.height/2-base.top,x2=br.left-base.left,y2=br.top+br.height/2-base.top,m=x1+(x2-x1)/2;paths.push(`<path d="M${x1},${y1} H${m} V${y2} H${x2}"/>`)}}svg.innerHTML=paths.join('')}
-function render(){renderStats();if(activeView==='matches'){renderFilters();renderMatches()}else if(activeView==='groups'){renderGroups()}else{renderBracket()}}
-function setView(v){activeView=v;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===v+'-view'));document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===v));render();window.scrollTo({top:document.querySelector('.hero').offsetHeight,behavior:'smooth'})}
-document.addEventListener('click',e=>{const pickerTrigger=e.target.closest('[data-team-picker]');if(pickerTrigger){openTeamPicker(pickerTrigger);return}const teamChoice=e.target.closest('[data-team-choice]');if(teamChoice){applyTeamChoice(teamChoice.dataset.teamChoice);return}if(e.target.closest('[data-close-picker]')){closeTeamPicker();return}const picker=document.getElementById('teamPicker');if(!picker.hidden&&!e.target.closest('#teamPicker'))closeTeamPicker();const close=e.target.closest('[data-close-detail]');if(close){closeMatchDetail();return}const view=e.target.closest('[data-view]');if(view){setView(view.dataset.view);return}const filter=e.target.closest('[data-filter]');if(filter){activeFilter=filter.dataset.filter;matchVisibleLimit=window.matchMedia('(max-width:700px)').matches?16:40;renderFilters();renderMatches();return}const more=e.target.closest('[data-load-more]');if(more){matchVisibleLimit+=window.matchMedia('(max-width:700px)').matches?16:40;renderMatches();return}const card=e.target.closest('[data-match-open]');if(card&&!e.target.closest('.score-input')){openMatchDetail(Number(card.dataset.matchOpen));return}const pick=e.target.closest('[data-pick]');if(pick&&pick.dataset.team){state.winners[pick.dataset.pick]=pick.dataset.team;sanitize();render();toast(pick.dataset.team+' advances');return}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('teamPicker').hidden){closeTeamPicker();return}if(e.key==='Escape'&&document.getElementById('matchDetail').classList.contains('active')){closeMatchDetail();return}if((e.key==='Enter'||e.key===' ')&&e.target.matches('[data-match-open]')){e.preventDefault();openMatchDetail(Number(e.target.dataset.matchOpen))}});
-document.addEventListener('change',e=>{if(e.target.matches('[data-score]')){const [n,side]=e.target.dataset.score.split(':');const current=state.scores[n]?[...state.scores[n]]:['',''];current[side]=e.target.value===''?'':Math.max(0,Number(e.target.value));if(current.every(v=>v===''))delete state.scores[n];else state.scores[n]=current;save();sanitize();render();}});
-document.getElementById('matchSearch').addEventListener('input',e=>{searchTerm=e.target.value.trim().toLowerCase();matchVisibleLimit=window.matchMedia('(max-width:700px)').matches?16:40;renderMatches()});
-document.getElementById('clearBracketBtn').addEventListener('click',()=>{state.winners={};state.overrides={};save();render();toast('Bracket cleared')});
-document.getElementById('resetBtn').addEventListener('click',()=>{if(confirm('Reset all added scores and bracket picks?')){state={version:6,scores:{...defaultScores},overrides:{},winners:{},sheetSig:null};save();render();toast('Google Sheet results restored')}});
-document.getElementById('syncBtn').addEventListener('click',()=>syncFromGoogleSheet(true));
-document.getElementById('printBtn').addEventListener('click',()=>window.print());
-window.addEventListener('resize',()=>{if(activeView==='bracket')drawConnectors()});
-render();syncFromGoogleSheet();setInterval(()=>syncFromGoogleSheet(),60000);
+/**
+ * Interactive World Cup 2026 match centre and knockout bracket.
+ *
+ * The application deliberately has no build step: GitHub Pages can serve these
+ * files directly. Tournament snapshots and FIFA's Annex C lookup table live in
+ * separate generated files; this is the hand-maintained application code.
+ */
+
+// -----------------------------------------------------------------------------
+// Configuration and in-memory indexes
+// -----------------------------------------------------------------------------
+
+const DATA = window.WORLDCUP_DATA;
+const FLAG_FILE_BY_TEAM_CODE = {
+  MEX: "MX",
+  RSA: "ZA",
+  KOR: "KR",
+  CZE: "CZ",
+  CAN: "CA",
+  BIH: "BA",
+  QAT: "QA",
+  SUI: "CH",
+  BRA: "BR",
+  MAR: "MA",
+  HAI: "HT",
+  SCO: "SCOTLAND",
+  USA: "US",
+  PAR: "PY",
+  AUS: "AU",
+  TUR: "TR",
+  GER: "DE",
+  CUR: "CW",
+  CIV: "CI",
+  ECU: "EC",
+  NED: "NL",
+  JPN: "JP",
+  SWE: "SE",
+  TUN: "TN",
+  BEL: "BE",
+  EGY: "EG",
+  IRN: "IR",
+  NZL: "NZ",
+  ESP: "ES",
+  CPV: "CV",
+  KSA: "SA",
+  URU: "UY",
+  FRA: "FR",
+  SEN: "SN",
+  IRQ: "IQ",
+  NOR: "NO",
+  ARG: "AR",
+  ALG: "DZ",
+  AUT: "AT",
+  JOR: "JO",
+  POR: "PT",
+  COD: "CD",
+  UZB: "UZ",
+  COL: "CO",
+  ENG: "ENGLAND",
+  CRO: "HR",
+  GHA: "GH",
+  PAN: "PA",
+};
+const GOOGLE_SHEET_ID = "1tvoPbpXmwkwtVDLVJo62wM_etwknNg9ZXDrMZHLJl6k";
+const STORAGE_KEY = "roadto26-state";
+const STATE_VERSION = 6;
+
+let teamByName = {};
+let matchByNumber = {};
+let sourceMap = {};
+let defaultScores = {};
+
+function rebuildDataIndexes() {
+  teamByName = Object.fromEntries(DATA.teams.map((t) => [t.name, t]));
+  matchByNumber = Object.fromEntries(DATA.matches.map((m) => [m.number, m]));
+  if (matchByNumber[100]) matchByNumber[100].label = "W95 vs W96";
+  sourceMap = {};
+  for (const match of DATA.matches) {
+    const route = (match.number === 100 ? "W95 vs W96" : match.label).match(
+      /^W(\d+)\s+vs\s+W(\d+)$/,
+    );
+    if (route) sourceMap[match.number] = [Number(route[1]), Number(route[2])];
+  }
+}
+function scoresFromMatches(matches) {
+  const scores = {};
+  for (const match of matches) {
+    if (!match.result) continue;
+    const parts = String(match.result).split(/[–-]/).map(Number);
+    if (parts.length === 2 && !parts.some(Number.isNaN))
+      scores[match.number] = parts;
+  }
+  return scores;
+}
+rebuildDataIndexes();
+defaultScores = scoresFromMatches(DATA.matches);
+const roundLayout = {
+  73: [1, 1],
+  75: [1, 3],
+  74: [1, 5],
+  77: [1, 7],
+  83: [1, 9],
+  84: [1, 11],
+  81: [1, 13],
+  82: [1, 15],
+  76: [1, 17],
+  78: [1, 19],
+  79: [1, 21],
+  80: [1, 23],
+  86: [1, 25],
+  88: [1, 27],
+  85: [1, 29],
+  87: [1, 31],
+  89: [2, 2],
+  90: [2, 6],
+  93: [2, 10],
+  94: [2, 14],
+  91: [2, 18],
+  92: [2, 22],
+  95: [2, 26],
+  96: [2, 30],
+  97: [3, 4],
+  98: [3, 12],
+  99: [3, 20],
+  100: [3, 28],
+  101: [4, 8],
+  102: [4, 24],
+  104: [5, 16],
+};
+
+// -----------------------------------------------------------------------------
+// Local user state
+// -----------------------------------------------------------------------------
+
+let state;
+try {
+  state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+} catch {
+  state = {};
+}
+state = {
+  version: STATE_VERSION,
+  scores: { ...defaultScores, ...(state.scores || {}) },
+  overrides: state.version === STATE_VERSION ? state.overrides || {} : {},
+  winners: state.winners || {},
+  sheetSig: state.sheetSig || null,
+};
+
+let activeView = "bracket";
+let activeFilter = "All";
+let searchTerm = "";
+let matchVisibleLimit = window.matchMedia("(max-width:700px)").matches
+  ? 16
+  : 40;
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// -----------------------------------------------------------------------------
+// Google Sheet synchronization
+// -----------------------------------------------------------------------------
+
+function gvizRows(payload) {
+  return payload.table.rows.map((row) => row.c.map((cell) => cell?.v ?? null));
+}
+function loadSheetTab(sheet, range) {
+  return new Promise((resolve, reject) => {
+    const callback =
+        "__roadToWorldCup_" +
+        Date.now() +
+        "_" +
+        Math.random().toString(36).slice(2),
+      script = document.createElement("script"),
+      timer = setTimeout(
+        () => finish(new Error("Google Sheet timed out")),
+        12000,
+      );
+    function finish(error, data) {
+      clearTimeout(timer);
+      delete window[callback];
+      script.remove();
+      error ? reject(error) : resolve(data);
+    }
+    window[callback] = (payload) =>
+      payload.status === "ok"
+        ? finish(null, payload)
+        : finish(
+            new Error(
+              payload.errors?.[0]?.detailed_message ||
+                "Google Sheet query failed",
+            ),
+          );
+    script.onerror = () => finish(new Error("Google Sheet is unavailable"));
+    const query = new URLSearchParams({
+      sheet,
+      range,
+      tqx: `out:json;responseHandler:${callback}`,
+      cacheBust: String(Date.now()),
+    });
+    script.src = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?${query}`;
+    document.head.appendChild(script);
+  });
+}
+function setSyncStatus(mode, text) {
+  const el = document.getElementById("syncStatus");
+  if (!el) return;
+  el.className = "sync-pill " + mode;
+  el.textContent = text;
+}
+let syncInFlight = false;
+async function syncFromGoogleSheet(manual = false) {
+  if (syncInFlight) return;
+  syncInFlight = true;
+  setSyncStatus("", "Syncing sheet…");
+  try {
+    const [matchPayload, teamPayload] = await Promise.all([
+      loadSheetTab("world_cup_matches", "A1:H105"),
+      loadSheetTab("teams", "A1:F49"),
+    ]);
+    const matches = gvizRows(matchPayload)
+      .filter((row) => Number(row[0]))
+      .map((row) => ({
+        number: Number(row[0]),
+        home: String(row[1] || ""),
+        away: String(row[2] || ""),
+        city: String(row[3] || ""),
+        stage: String(row[4] || ""),
+        label: String(row[5] || ""),
+        kickoff: String(row[6] || ""),
+        result: row[7] == null ? null : String(row[7]),
+      }));
+    const teams = gvizRows(teamPayload)
+      .filter((row) => Number(row[0]) && row[1])
+      .map((row) => ({
+        id: Number(row[0]),
+        name: String(row[1]),
+        code: String(row[2] || ""),
+        group: String(row[3] || ""),
+        fairPlay: row[4] == null ? null : Number(row[4]),
+        worldRank: row[5] == null ? null : Number(row[5]),
+      }));
+    if (matches.length !== 104 || teams.length !== 48)
+      throw new Error(
+        `Expected 104 matches and 48 teams; received ${matches.length} and ${teams.length}`,
+      );
+    DATA.matches = matches;
+    DATA.teams = teams;
+    rebuildDataIndexes();
+    defaultScores = scoresFromMatches(matches);
+    const sig = matchPayload.sig + "|" + teamPayload.sig;
+    if (state.sheetSig !== sig) {
+      state.scores = { ...defaultScores };
+      state.sheetSig = sig;
+      sanitize();
+    } else {
+      save();
+    }
+    render();
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    setSyncStatus("live", "Sheet live · " + time);
+    if (manual) toast("Google Sheet updated");
+  } catch (error) {
+    setSyncStatus("error", "Offline data");
+    if (manual) toast(error.message);
+  } finally {
+    syncInFlight = false;
+  }
+}
+// -----------------------------------------------------------------------------
+// Shared display helpers
+// -----------------------------------------------------------------------------
+
+function flag(name) {
+  const t = teamByName[name],
+    iso = t && FLAG_FILE_BY_TEAM_CODE[t.code];
+  return iso
+    ? `<img class="flag-img" src="assets/flags/${iso.toLowerCase()}.svg" alt="${esc(name)} flag" loading="lazy" decoding="async" width="28" height="19">`
+    : '<span aria-hidden="true">◌</span>';
+}
+function esc(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+}
+function dateLabel(raw) {
+  const m = raw.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return raw;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return (
+    d.toLocaleDateString("en", { month: "short", day: "numeric" }) +
+    " · " +
+    m[4] +
+    ":" +
+    m[5]
+  );
+}
+// -----------------------------------------------------------------------------
+// FIFA group standings and tie-break rules
+// -----------------------------------------------------------------------------
+
+function statValue(value, fallback) {
+  return value !== null &&
+    value !== undefined &&
+    value !== "" &&
+    Number.isFinite(Number(value))
+    ? Number(value)
+    : fallback;
+}
+function partitionEqual(list, key) {
+  const groups = [];
+  for (const item of list) {
+    const value = key(item),
+      last = groups[groups.length - 1];
+    if (!last || last.key !== value) groups.push({ key: value, items: [item] });
+    else last.items.push(item);
+  }
+  return groups.map((group) => group.items);
+}
+function headToHeadStats(teams, matches) {
+  const names = new Set(teams.map((team) => team.name)),
+    stats = Object.fromEntries(
+      teams.map((team) => [team.name, { pts: 0, gf: 0, ga: 0, gd: 0 }]),
+    );
+  for (const match of matches) {
+    if (!names.has(match.home) || !names.has(match.away)) continue;
+    const score = state.scores[match.number];
+    if (
+      !score ||
+      score.length < 2 ||
+      score.some((value) => value === "" || !Number.isFinite(Number(value)))
+    )
+      continue;
+    const home = Number(score[0]),
+      away = Number(score[1]),
+      a = stats[match.home],
+      b = stats[match.away];
+    a.gf += home;
+    a.ga += away;
+    b.gf += away;
+    b.ga += home;
+    if (home > away) a.pts += 3;
+    else if (home < away) b.pts += 3;
+    else {
+      a.pts++;
+      b.pts++;
+    }
+  }
+  for (const value of Object.values(stats)) value.gd = value.gf - value.ga;
+  return stats;
+}
+function rankOverall(teams) {
+  return [...teams].sort(
+    (a, b) =>
+      b.gd - a.gd ||
+      b.gf - a.gf ||
+      statValue(b.fairPlay, -Infinity) - statValue(a.fairPlay, -Infinity) ||
+      statValue(a.worldRank, Infinity) - statValue(b.worldRank, Infinity) ||
+      a.id - b.id,
+  );
+}
+function rankPointTie(teams, matches) {
+  if (teams.length < 2) return teams;
+  const mini = headToHeadStats(teams, matches),
+    sorted = [...teams].sort(
+      (a, b) =>
+        mini[b.name].pts - mini[a.name].pts ||
+        mini[b.name].gd - mini[a.name].gd ||
+        mini[b.name].gf - mini[a.name].gf,
+    ),
+    clusters = partitionEqual(
+      sorted,
+      (team) =>
+        `${mini[team.name].pts}|${mini[team.name].gd}|${mini[team.name].gf}`,
+    );
+  if (clusters.length === 1) return rankOverall(teams);
+  return clusters.flatMap((cluster) =>
+    cluster.length > 1 ? rankPointTie(cluster, matches) : cluster,
+  );
+}
+
+/**
+ * Calculate all twelve group tables using FIFA's ordered tie-break criteria.
+ * Head-to-head results are applied before overall goal difference and goals.
+ */
+function standings() {
+  const groups = {};
+  for (const letter of "ABCDEFGHIJKL")
+    groups[letter] = DATA.teams
+      .filter((t) => t.group === letter)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        fairPlay: t.fairPlay,
+        worldRank: t.worldRank,
+        p: 0,
+        w: 0,
+        d: 0,
+        l: 0,
+        gf: 0,
+        ga: 0,
+        gd: 0,
+        pts: 0,
+      }));
+  const groupMatches = DATA.matches.filter(
+    (match) => match.stage === "Group Stage",
+  );
+  for (const match of groupMatches) {
+    const score = state.scores[match.number];
+    if (
+      !score ||
+      score.length < 2 ||
+      score.some((value) => value === "" || !Number.isFinite(Number(value)))
+    )
+      continue;
+    const group = teamByName[match.home]?.group,
+      a = groups[group]?.find((team) => team.name === match.home),
+      b = groups[group]?.find((team) => team.name === match.away);
+    if (!a || !b) continue;
+    const home = Number(score[0]),
+      away = Number(score[1]);
+    a.p++;
+    b.p++;
+    a.gf += home;
+    a.ga += away;
+    b.gf += away;
+    b.ga += home;
+    if (home > away) {
+      a.w++;
+      b.l++;
+      a.pts += 3;
+    } else if (home < away) {
+      b.w++;
+      a.l++;
+      b.pts += 3;
+    } else {
+      a.d++;
+      b.d++;
+      a.pts++;
+      b.pts++;
+    }
+  }
+  for (const [group, list] of Object.entries(groups)) {
+    for (const team of list) team.gd = team.gf - team.ga;
+    const matches = groupMatches.filter(
+        (match) => teamByName[match.home]?.group === group,
+      ),
+      pointsGroups = partitionEqual(
+        [...list].sort((a, b) => b.pts - a.pts),
+        (team) => String(team.pts),
+      );
+    groups[group] = pointsGroups.flatMap((cluster) =>
+      cluster.length > 1 ? rankPointTie(cluster, matches) : cluster,
+    );
+  }
+  return groups;
+}
+
+// -----------------------------------------------------------------------------
+// Best third-place teams and FIFA Annex C allocation
+// -----------------------------------------------------------------------------
+
+function rankedThirds() {
+  return Object.entries(standings())
+    .map(([group, list]) => ({ ...list[2], group }))
+    .sort(
+      (a, b) =>
+        b.pts - a.pts ||
+        b.gd - a.gd ||
+        b.gf - a.gf ||
+        statValue(b.fairPlay, -Infinity) - statValue(a.fairPlay, -Infinity) ||
+        statValue(a.worldRank, Infinity) - statValue(b.worldRank, Infinity) ||
+        a.id - b.id,
+    );
+}
+function thirdPlaceAllocation() {
+  const thirds = rankedThirds().slice(0, 8),
+    key = thirds
+      .map((team) => team.group)
+      .sort()
+      .join(""),
+    rule = window.THIRD_PLACE_MAP?.[key] || {},
+    byGroup = Object.fromEntries(thirds.map((team) => [team.group, team.name])),
+    byWinner = {};
+  for (const [winnerGroup, thirdGroup] of Object.entries(rule))
+    byWinner[winnerGroup] = byGroup[thirdGroup] || null;
+  return { thirds, key, byWinner };
+}
+function resolveToken(token, num) {
+  const placed = token.match(/^([12])([A-L])$/);
+  if (placed)
+    return standings()[placed[2]][Number(placed[1]) - 1]?.name || null;
+  const third = token.match(/^3([A-L]+)$/);
+  if (third) {
+    const winnerToken = matchByNumber[num].label
+        .split(/\s+vs\s+/)
+        .find((part) => /^1[A-L]$/.test(part)),
+      winnerGroup = winnerToken?.slice(1);
+    return winnerGroup
+      ? thirdPlaceAllocation().byWinner[winnerGroup] || null
+      : null;
+  }
+  return null;
+}
+// -----------------------------------------------------------------------------
+// Round-of-32 automatic assignments and manual scenario overrides
+// -----------------------------------------------------------------------------
+
+function r32SlotKey(num, side) {
+  return `${num}:${side}`;
+}
+function r32Slots() {
+  const slots = [];
+  for (let num = 73; num <= 88; num++) {
+    const match = matchByNumber[num];
+    if (!match) continue;
+    match.label
+      .split(/\s+vs\s+/)
+      .forEach((token, side) =>
+        slots.push({ num, side, token, key: r32SlotKey(num, side) }),
+      );
+  }
+  return slots;
+}
+function automaticR32Participants(num) {
+  return matchByNumber[num].label
+    .split(/\s+vs\s+/)
+    .map((token) => resolveToken(token, num));
+}
+function baseEligibleNames(token) {
+  const placed = token.match(/^[12]([A-L])$/);
+  if (placed) return standings()[placed[1]].map((team) => team.name);
+  const third = token.match(/^3([A-L]+)$/);
+  if (third)
+    return thirdPlaceAllocation()
+      .thirds.filter((team) => third[1].includes(team.group))
+      .map((team) => team.name);
+  return [];
+}
+function participantsWithOverrides(num, overrides = state.overrides) {
+  return automaticR32Participants(num).map(
+    (name, side) => overrides[r32SlotKey(num, side)] || name,
+  );
+}
+function r32Participants(num) {
+  return participantsWithOverrides(num);
+}
+function setDraftOverride(draft, slot, name) {
+  const automatic = automaticR32Participants(slot.num)[slot.side];
+  if (name === automatic) delete draft[slot.key];
+  else draft[slot.key] = name;
+}
+/**
+ * Build a safe scenario change for one Round-of-32 slot.
+ *
+ * If the requested country already occupies another compatible slot, the two
+ * countries are swapped. The proposal is rejected when it would duplicate a
+ * country or violate a group/third-place source rule.
+ */
+function buildOverrideProposal(num, side, name) {
+  const slots = r32Slots(),
+    target = slots.find((slot) => slot.num === num && slot.side === side);
+  if (!target || !baseEligibleNames(target.token).includes(name)) return null;
+  const current = participantsWithOverrides(num)[side],
+    draft = { ...state.overrides },
+    changed = new Set([num]),
+    other = slots.find(
+      (slot) =>
+        slot.key !== target.key &&
+        participantsWithOverrides(slot.num, draft)[slot.side] === name,
+    );
+  if (other) {
+    if (!baseEligibleNames(other.token).includes(current)) return null;
+    setDraftOverride(draft, other, current);
+    changed.add(other.num);
+  }
+  setDraftOverride(draft, target, name);
+  const picks = slots
+    .map((slot) => participantsWithOverrides(slot.num, draft)[slot.side])
+    .filter(Boolean);
+  if (new Set(picks).size !== picks.length) return null;
+  return { overrides: draft, changed };
+}
+function sanitizeR32Overrides() {
+  const slots = r32Slots(),
+    validKeys = new Set(slots.map((slot) => slot.key));
+  for (const key of Object.keys(state.overrides)) {
+    const slot = slots.find((item) => item.key === key),
+      name = state.overrides[key];
+    if (
+      !validKeys.has(key) ||
+      !slot ||
+      !baseEligibleNames(slot.token).includes(name) ||
+      name === automaticR32Participants(slot.num)[slot.side]
+    )
+      delete state.overrides[key];
+  }
+  let guard = 0;
+  while (guard++ < 32) {
+    const used = new Map();
+    let removed = false;
+    for (const slot of slots) {
+      const name = participantsWithOverrides(slot.num)[slot.side];
+      if (!name) continue;
+      if (used.has(name)) {
+        const duplicateOverride = state.overrides[slot.key]
+          ? slot
+          : used.get(name);
+        if (state.overrides[duplicateOverride.key]) {
+          delete state.overrides[duplicateOverride.key];
+          removed = true;
+          break;
+        }
+      } else used.set(name, slot);
+    }
+    if (!removed) break;
+  }
+}
+// -----------------------------------------------------------------------------
+// Knockout routing and state validation
+// -----------------------------------------------------------------------------
+
+function participants(num) {
+  if (num >= 73 && num <= 88) return r32Participants(num);
+  if (num === 103) {
+    return [loser(101), loser(102)];
+  }
+  const src = sourceMap[num] || [];
+  return src.map((n) => state.winners[n] || null);
+}
+function loser(num) {
+  const p = participants(num),
+    w = state.winners[num];
+  return w ? p.find((x) => x && x !== w) || null : null;
+}
+function sanitize() {
+  sanitizeR32Overrides();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const num of [
+      73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
+      91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104,
+    ]) {
+      const w = state.winners[num];
+      if (w && !participants(num).includes(w)) {
+        delete state.winners[num];
+        changed = true;
+      }
+    }
+  }
+  save();
+}
+// -----------------------------------------------------------------------------
+// Rendering
+// -----------------------------------------------------------------------------
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1800);
+}
+function renderStats() {
+  const count = Object.values(state.scores).filter(
+    (s) =>
+      s &&
+      s.length === 2 &&
+      s.every((v) => v !== "" && Number.isFinite(Number(v))),
+  ).length;
+  document.getElementById("playedStat").textContent = count;
+  const champ = state.winners[104];
+  document.getElementById("heroChampion").textContent =
+    champ || "Still unwritten";
+  document.getElementById("championName").textContent =
+    champ || "Make your picks";
+}
+function renderFilters() {
+  const stages = [
+    "All",
+    "Group Stage",
+    "Round of 32",
+    "Round of 16",
+    "Quarterfinals",
+    "Semifinals",
+    "Final",
+  ];
+  document.getElementById("matchFilters").innerHTML = stages
+    .map(
+      (s) =>
+        `<button class="chip ${s === activeFilter ? "active" : ""}" data-filter="${s}">${s}</button>`,
+    )
+    .join("");
+}
+function renderMatches() {
+  const grid = document.getElementById("matchGrid"),
+    more = document.getElementById("matchMore");
+  let matches = DATA.matches.filter(
+      (m) =>
+        (activeFilter === "All" || m.stage === activeFilter) &&
+        (m.home + " " + m.away + " " + m.city + " " + m.label)
+          .toLowerCase()
+          .includes(searchTerm),
+    ),
+    visible = matches.slice(0, matchVisibleLimit);
+  grid.innerHTML = visible.length
+    ? visible
+        .map((m) => {
+          const s = state.scores[m.number] || ["", ""];
+          const dynamic =
+              m.number >= 73 ? participants(m.number) : [m.home, m.away],
+            tokens = m.label.split(/\s+vs\s+/);
+          const home = dynamic[0] || (m.number >= 73 ? tokens[0] : m.home),
+            away = dynamic[1] || (m.number >= 73 ? tokens[1] : m.away),
+            done = s[0] !== "" && s[1] !== "";
+          return `<article class="match-card" data-match-open="${m.number}" tabindex="0" aria-label="Open match ${m.number}"><div class="match-top"><span>Match ${m.number} · ${esc(m.label)}</span><span>${esc(m.stage)}</span></div><div class="team-score"><div class="team"><span class="flag">${flag(home)}</span><span>${esc(home)}</span></div><input class="score-input" inputmode="numeric" min="0" type="number" aria-label="${esc(home)} score" data-score="${m.number}:0" value="${s[0] ?? ""}"></div><div class="team-score"><div class="team"><span class="flag">${flag(away)}</span><span>${esc(away)}</span></div><input class="score-input" inputmode="numeric" min="0" type="number" aria-label="${esc(away)} score" data-score="${m.number}:1" value="${s[1] ?? ""}"></div><div class="match-foot"><span><i class="status-dot ${done ? "done" : ""}"></i>${done ? "Final" : "Awaiting result"}</span><span>${dateLabel(m.kickoff)} · ${esc(m.city)}</span></div></article>`;
+        })
+        .join("")
+    : '<div class="empty">No matches found.</div>';
+  more.innerHTML =
+    matches.length > visible.length
+      ? `<button data-load-more>Show ${Math.min(window.matchMedia("(max-width:700px)").matches ? 16 : 40, matches.length - visible.length)} more matches</button>`
+      : "";
+}
+function detailFlag(name) {
+  return teamByName[name]
+    ? `<div class="detail-flag">${flag(name)}</div>`
+    : `<div class="detail-flag"><div class="detail-placeholder">${esc(name)}</div></div>`;
+}
+function openMatchDetail(number) {
+  const match = matchByNumber[number];
+  if (!match) return;
+  const dynamic =
+      number >= 73 ? participants(number) : [match.home, match.away],
+    tokens = match.label.split(/\s+vs\s+/),
+    home = dynamic[0] || (number >= 73 ? tokens[0] : match.home),
+    away = dynamic[1] || (number >= 73 ? tokens[1] : match.away),
+    score = state.scores[number],
+    hasScore =
+      score &&
+      score.length === 2 &&
+      score.every((value) => value !== "" && Number.isFinite(Number(value))),
+    scoreText = hasScore ? `${score[0]} – ${score[1]}` : "VS";
+  document.getElementById("detailLabel").textContent =
+    `Match ${number} · ${match.label}`;
+  document.getElementById("detailStage").textContent = match.stage;
+  document.getElementById("matchDetailContent").innerHTML =
+    `<div class="detail-matchup"><div class="detail-team">${detailFlag(home)}<h2>${esc(home)}</h2></div><div class="detail-score">${scoreText}<small>${hasScore ? "Final score" : "Result pending"}</small></div><div class="detail-team">${detailFlag(away)}<h2>${esc(away)}</h2></div></div><div class="detail-meta"><span>${dateLabel(match.kickoff)}</span><span>${esc(match.city)}</span><span>${esc(match.stage)}</span></div>`;
+  const detail = document.getElementById("matchDetail");
+  detail.classList.add("active");
+  detail.setAttribute("aria-hidden", "false");
+  document.body.classList.add("no-scroll");
+  detail.querySelector("[data-close-detail]").focus();
+}
+function closeMatchDetail() {
+  const detail = document.getElementById("matchDetail");
+  detail.classList.remove("active");
+  detail.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("no-scroll");
+}
+function renderGroups() {
+  const groups = standings(),
+    bestThirds = new Set(
+      thirdPlaceAllocation().thirds.map((team) => team.name),
+    );
+  document.getElementById("groupsGrid").innerHTML = Object.entries(groups)
+    .map(
+      ([g, list]) =>
+        `<article class="group-card"><div class="group-title"><h3>Group ${g}</h3></div><table class="table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead><tbody>${list.map((t, i) => `<tr class="${i < 2 ? "qualify" : i === 2 ? (bestThirds.has(t.name) ? "third third-best" : "third third-out") : ""}"><td class="rank">${i + 1}</td><td><div class="team"><span class="flag">${flag(t.name)}</span><span>${esc(t.name)}</span></div></td><td>${t.p}</td><td>${t.gd > 0 ? "+" : ""}${t.gd}</td><td>${t.pts}</td></tr>`).join("")}</tbody></table></article>`,
+    )
+    .join("");
+}
+function slotDescription(token) {
+  const placed = token.match(/^([12])([A-L])$/);
+  if (placed)
+    return `${placed[1] === "1" ? "1st" : "2nd"} place · Group ${placed[2]}`;
+  const third = token.match(/^3([A-L]+)$/);
+  if (third) return `3rd place · Groups ${[...third[1]].join("/")}`;
+  return token;
+}
+// -----------------------------------------------------------------------------
+// Round-of-32 team picker
+// -----------------------------------------------------------------------------
+
+function openTeamPicker(trigger) {
+  const [numRaw, sideRaw] = trigger.dataset.teamPicker.split(":"),
+    num = Number(numRaw),
+    side = Number(sideRaw),
+    token = matchByNumber[num].label.split(/\s+vs\s+/)[side],
+    current = participantsWithOverrides(num)[side],
+    automatic = automaticR32Participants(num)[side],
+    picker = document.getElementById("teamPicker"),
+    candidates = baseEligibleNames(token);
+  picker.dataset.num = String(num);
+  picker.dataset.side = String(side);
+  picker.innerHTML = `<div class="team-picker-head"><div><small>Match ${num}</small><strong>${esc(slotDescription(token))}</strong></div><button type="button" data-close-picker aria-label="Close team picker">×</button></div><div class="team-picker-options">${candidates
+    .map((name) => {
+      const available =
+          name === current || Boolean(buildOverrideProposal(num, side, name)),
+        team = teamByName[name],
+        isAutomatic = name === automatic;
+      return `<button type="button" class="team-picker-option ${name === current ? "selected" : ""}" data-team-choice="${esc(name)}" ${available ? "" : "disabled"}><span class="picker-flag">${flag(name)}</span><span class="picker-name"><strong>${esc(name)}</strong><small>Group ${esc(team?.group || "")} ${isAutomatic ? "· Calculated" : ""}</small></span><span class="picker-state">${name === current ? "✓" : available ? "↔" : "Used"}</span></button>`;
+    })
+    .join(
+      "",
+    )}</div><p class="team-picker-note">Only teams allowed by this slot are shown. A used team is available when it can be swapped without creating a duplicate.</p>`;
+  picker.hidden = false;
+  picker.classList.add("open");
+  const rect = trigger.getBoundingClientRect();
+  if (window.innerWidth > 700) {
+    picker.style.left =
+      Math.max(12, Math.min(rect.left, window.innerWidth - 334)) + "px";
+    picker.style.top =
+      Math.min(rect.bottom + 8, window.innerHeight - picker.offsetHeight - 12) +
+      "px";
+  } else {
+    picker.style.left = "";
+    picker.style.top = "";
+  }
+  picker.querySelector(".team-picker-option:not(:disabled)")?.focus();
+}
+function closeTeamPicker() {
+  const picker = document.getElementById("teamPicker");
+  picker.classList.remove("open");
+  picker.hidden = true;
+}
+function applyTeamChoice(name) {
+  const picker = document.getElementById("teamPicker"),
+    num = Number(picker.dataset.num),
+    side = Number(picker.dataset.side),
+    proposal = buildOverrideProposal(num, side, name);
+  if (!proposal) {
+    toast("That team cannot be used in this slot");
+    return;
+  }
+  state.overrides = proposal.overrides;
+  for (const changedNum of proposal.changed) delete state.winners[changedNum];
+  closeTeamPicker();
+  sanitize();
+  render();
+  toast(name + " selected");
+}
+function matchCard(num) {
+  const m = matchByNumber[num],
+    p = participants(num),
+    w = state.winners[num],
+    isFinal = num === 104,
+    tokens = m.label.split(/\s+vs\s+/);
+  const rows = p
+    .map((name, i) =>
+      num <= 88
+        ? `<div class="pick-row ${w === name ? "winner" : ""}"><button type="button" class="team-choice" data-team-picker="${num}:${i}" aria-label="Change ${esc(name || slotDescription(tokens[i]))}"><span class="team"><span class="flag">${flag(name)}</span><span class="${name ? "" : "tbd"}">${esc(name || slotDescription(tokens[i]))}</span></span><span class="picker-chevron">⌄</span></button><button type="button" class="advance-btn ${w === name ? "chosen" : ""}" data-pick="${num}" data-team="${esc(name || "")}" ${name ? "" : "disabled"} aria-label="Advance ${esc(name || "team")}">${w === name ? "✓" : "→"}</button></div>`
+        : `<button class="pick-row ${w === name ? "winner" : ""}" data-pick="${num}" data-team="${esc(name || "")}" ${name ? "" : "disabled"}><span class="team"><span class="flag">${flag(name)}</span><span class="${name ? "" : "tbd"}">${esc(name || "Winner TBD")}</span></span>${w === name ? '<span class="pick-mark">✓</span>' : ""}</button>`,
+    )
+    .join("");
+  return `<article id="match-${num}" class="bracket-match ${w ? "selected" : ""} ${isFinal ? "final-card" : ""}" style="grid-column:${roundLayout[num][0]};grid-row:${roundLayout[num][1]} / span 2"><div class="bm-head"><span>Match ${num}</span><span>${dateLabel(m.kickoff)}</span></div>${rows}</article>`;
+}
+function renderBracket() {
+  sanitize();
+  const nums = Object.keys(roundLayout).map(Number);
+  document.getElementById("bracketGrid").innerHTML = nums
+    .map(matchCard)
+    .join("");
+  const p = participants(103),
+    w = state.winners[103];
+  document.getElementById("thirdPlace").innerHTML =
+    `<div class="bracket-match">${p.map((name) => `<button class="pick-row ${w === name ? "winner" : ""}" data-pick="103" data-team="${esc(name || "")}" ${name ? "" : "disabled"}><span class="team"><span class="flag">${flag(name)}</span><span class="${name ? "" : "tbd"}">${esc(name || "Semifinal loser TBD")}</span></span>${w === name ? '<span class="pick-mark">✓</span>' : ""}</button>`).join("")}</div>`;
+  requestAnimationFrame(drawConnectors);
+}
+function drawConnectors() {
+  const svg = document.getElementById("connectorLayer"),
+    base = svg.getBoundingClientRect(),
+    paths = [];
+  for (const [target, sources] of Object.entries(sourceMap)) {
+    for (const src of sources) {
+      const a = document.getElementById("match-" + src),
+        b = document.getElementById("match-" + target);
+      if (!a || !b) continue;
+      const ar = a.getBoundingClientRect(),
+        br = b.getBoundingClientRect(),
+        x1 = ar.right - base.left,
+        y1 = ar.top + ar.height / 2 - base.top,
+        x2 = br.left - base.left,
+        y2 = br.top + br.height / 2 - base.top,
+        m = x1 + (x2 - x1) / 2;
+      paths.push(`<path d="M${x1},${y1} H${m} V${y2} H${x2}"/>`);
+    }
+  }
+  svg.innerHTML = paths.join("");
+}
+function render() {
+  renderStats();
+  if (activeView === "matches") {
+    renderFilters();
+    renderMatches();
+  } else if (activeView === "groups") {
+    renderGroups();
+  } else {
+    renderBracket();
+  }
+}
+function setView(v) {
+  activeView = v;
+  document
+    .querySelectorAll(".view")
+    .forEach((el) => el.classList.toggle("active", el.id === v + "-view"));
+  document
+    .querySelectorAll("[data-view]")
+    .forEach((el) => el.classList.toggle("active", el.dataset.view === v));
+  render();
+  window.scrollTo({
+    top: document.querySelector(".hero").offsetHeight,
+    behavior: "smooth",
+  });
+}
+// -----------------------------------------------------------------------------
+// Event handling and application startup
+// -----------------------------------------------------------------------------
+
+document.addEventListener("click", (e) => {
+  const pickerTrigger = e.target.closest("[data-team-picker]");
+  if (pickerTrigger) {
+    openTeamPicker(pickerTrigger);
+    return;
+  }
+  const teamChoice = e.target.closest("[data-team-choice]");
+  if (teamChoice) {
+    applyTeamChoice(teamChoice.dataset.teamChoice);
+    return;
+  }
+  if (e.target.closest("[data-close-picker]")) {
+    closeTeamPicker();
+    return;
+  }
+  const picker = document.getElementById("teamPicker");
+  if (!picker.hidden && !e.target.closest("#teamPicker")) closeTeamPicker();
+  const close = e.target.closest("[data-close-detail]");
+  if (close) {
+    closeMatchDetail();
+    return;
+  }
+  const view = e.target.closest("[data-view]");
+  if (view) {
+    setView(view.dataset.view);
+    return;
+  }
+  const filter = e.target.closest("[data-filter]");
+  if (filter) {
+    activeFilter = filter.dataset.filter;
+    matchVisibleLimit = window.matchMedia("(max-width:700px)").matches
+      ? 16
+      : 40;
+    renderFilters();
+    renderMatches();
+    return;
+  }
+  const more = e.target.closest("[data-load-more]");
+  if (more) {
+    matchVisibleLimit += window.matchMedia("(max-width:700px)").matches
+      ? 16
+      : 40;
+    renderMatches();
+    return;
+  }
+  const card = e.target.closest("[data-match-open]");
+  if (card && !e.target.closest(".score-input")) {
+    openMatchDetail(Number(card.dataset.matchOpen));
+    return;
+  }
+  const pick = e.target.closest("[data-pick]");
+  if (pick && pick.dataset.team) {
+    state.winners[pick.dataset.pick] = pick.dataset.team;
+    sanitize();
+    render();
+    toast(pick.dataset.team + " advances");
+    return;
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !document.getElementById("teamPicker").hidden) {
+    closeTeamPicker();
+    return;
+  }
+  if (
+    e.key === "Escape" &&
+    document.getElementById("matchDetail").classList.contains("active")
+  ) {
+    closeMatchDetail();
+    return;
+  }
+  if (
+    (e.key === "Enter" || e.key === " ") &&
+    e.target.matches("[data-match-open]")
+  ) {
+    e.preventDefault();
+    openMatchDetail(Number(e.target.dataset.matchOpen));
+  }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.matches("[data-score]")) {
+    const [n, side] = e.target.dataset.score.split(":");
+    const current = state.scores[n] ? [...state.scores[n]] : ["", ""];
+    current[side] =
+      e.target.value === "" ? "" : Math.max(0, Number(e.target.value));
+    if (current.every((v) => v === "")) delete state.scores[n];
+    else state.scores[n] = current;
+    save();
+    sanitize();
+    render();
+  }
+});
+document.getElementById("matchSearch").addEventListener("input", (e) => {
+  searchTerm = e.target.value.trim().toLowerCase();
+  matchVisibleLimit = window.matchMedia("(max-width:700px)").matches ? 16 : 40;
+  renderMatches();
+});
+document.getElementById("clearBracketBtn").addEventListener("click", () => {
+  state.winners = {};
+  state.overrides = {};
+  save();
+  render();
+  toast("Bracket cleared");
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Reset all added scores and bracket picks?")) {
+    state = {
+      version: STATE_VERSION,
+      scores: { ...defaultScores },
+      overrides: {},
+      winners: {},
+      sheetSig: null,
+    };
+    save();
+    render();
+    toast("Google Sheet results restored");
+  }
+});
+document
+  .getElementById("syncBtn")
+  .addEventListener("click", () => syncFromGoogleSheet(true));
+document
+  .getElementById("printBtn")
+  .addEventListener("click", () => window.print());
+window.addEventListener("resize", () => {
+  if (activeView === "bracket") drawConnectors();
+});
+render();
+syncFromGoogleSheet();
+setInterval(() => syncFromGoogleSheet(), 60000);

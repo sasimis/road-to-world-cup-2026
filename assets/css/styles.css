@@ -35,6 +35,32 @@
 }
 html {
   scroll-behavior: smooth;
+  scrollbar-color: var(--cyan) #111842;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #111842;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 3px solid #111842;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--cyan), var(--sky));
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--yellow), var(--cyan));
+}
+
+*::-webkit-scrollbar-corner {
+  background: #111842;
 }
 body {
   margin: 0;
@@ -1504,8 +1530,12 @@ body {
   margin: 0 auto 28px;
   display: grid;
   place-items: center;
+  position: relative;
 }
 .detail-flag .flag-img {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   border-radius: 12px;
